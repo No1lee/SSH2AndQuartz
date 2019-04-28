@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+           http://www.springframework.org/schema/context
+           http://www.springframework.org/schema/context/spring-context-3.2.xsd
+           http://www.springframework.org/schema/aop
+           http://www.springframework.org/schema/aop/spring-aop-3.2.xsd
+           http://www.springframework.org/schema/tx
+           http://www.springframework.org/schema/tx/spring-tx-3.2.xsd">
+
+	<context:property-placeholder location="classpath:jdbc.properties" />
+
+	<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+		<property name="driverClass" value="${jdbc.driverClassName}" />
+		<property name="jdbcUrl" value="${jdbc.url}" />
+		<property name="user" value="${jdbc.username}" />
+		<property name="password" value="${jdbc.password}" />
+		<property name="autoCommitOnClose" value="true" />
+		<property name="initialPoolSize" value="${cpool.initialPoolSize}" />
+		<property name="minPoolSize" value="${cpool.minPoolSize}" />
+		<property name="maxPoolSize" value="${cpool.maxPoolSize}" />
+		<property name="maxIdleTime" value="${cpool.maxIdleTime}" />
+		<property name="acquireIncrement" value="${cpool.acquireIncrement}" />
+		<property name="idleConnectionTestPeriod" value="${cpool.idleConnectionTestPeriod}" />
+		<property name="acquireRetryAttempts" value="${cpool.acquireRetryAttempts}" />
+		<property name="maxStatements" value="${c3p0.maxStatements}" />
+		<property name="maxStatementsPerConnection" value="${c3p0.maxStatementsPerConnection}" />
+	</bean>
+
+
+	<!-- Spring整合hibernate -->
+	<bean id="sessionFactory"
+		class="org.springframework.orm.hibernate3.LocalSessionFactoryBean">
+		<property name="dataSource">
+			<ref local="dataSource" />
+		</property>
+		<property name="mappingResources">
+			<list>
+				<value>com/rj/bd/framework/entity/Student.hbm.xml</value>
+			</list>
+		</property>
+		<property name="hibernateProperties">
+			<props>
+				<prop key="hibernate.dialect">${hibernate.dialect}</prop>
+				<prop key="hibernate.show_sql">${hibernate.show_sql}</prop>
+				<prop key="hibernate.jdbc.batch_size">${hibernate.jdbc.batch_size}</prop>
+				<prop key="hibernate.hbm2ddl.auto">update</prop>
+			</props>
+		</property>
+	</bean>
+
+
+	<!-- 定义事务管理 -->
+	<bean id="hibernateTransactionManager"
+		class="org.springframework.orm.hibernate3.HibernateTransactionManager">
+		<property name="sessionFactory">
+			<ref local="sessionFactory" />
+		</property>
+	</bean>
+
+	<!-- 定义事务管理拦截器 -->
+	<bean id="baseTransactionProxyBean" lazy-init="true"
+		class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean">
+		<property name="transactionManager">
+			<ref bean="hibernateTransactionManager" />
+		</property>
+		<property name="transactionAttributes">
+			<props>
+				<prop key="*">PROPAGATION_REQUIRED</prop>
+			</props>
+		</property>
+	</bean>
+
+
+	<bean id="dao" class="com.rj.bd.framework.dao.DaoImpl">
+		<property name="sessionFactory">
+			<ref local="sessionFactory" />
+		</property>
+	</bean>
+
+
+	<bean id="studentService" class="com.rj.bd.user.service.StudentServiceImpl">
+		<property name="dao">
+			<ref bean="dao" />
+		</property>
+	</bean>
+	<bean id="dateu" class="com.rj.bd.utils.DateUtils">
+		
+	</bean>
+
+	<!-- 1.用户任务工作的bean -->
+	<bean id="myJob" class="com.rj.bd.user.qz.MyJob">
+		<property name="studentService">
+			<ref bean="studentService" />
+		</property>
+		<property name="dateu">
+			<ref bean="dateu" />
+		</property>
+		<property name="stu">
+			<bean class="com.rj.bd.framework.entity.Student" autowire="byName">
+			</bean>
+		</property>
+	</bean>
+
+	<!-- 2.任务详细的bean（不过该bean已经交由spring框架管理了，我们只是需要给他注入任务工作的bean和里面的方法的名字） -->
+	<bean id="myJobDetail"
+		class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
+		<property name="targetObject">
+			<ref bean="myJob" />
+		</property>
+
+		<property name="targetMethod">
+			<value>work</value>
+		</property>
+
+		<!--Spring中关于quartz的并发解决办法 -->
+		<property name="concurrent">
+			<value>false</value>
+		</property>
+
+
+	</bean>
+
+	<!--3.配置触发器 -->
+	<bean id="myJobTrigger"
+		class="org.springframework.scheduling.quartz.CronTriggerFactoryBean">
+		<property name="jobDetail">
+			<ref bean="myJobDetail" />
+		</property>
+		<!-- 配置corn表达式：上午17:25触发一次 -->
+<!-- 		<property name="cronExpression"> -->
+<!-- 			<value>0 25 17 * * ?</value> -->
+<!-- 		</property> -->
+
+		<!-- 每分钟的第0,10,20,30,40,50秒调度一次 -->
+		<property name="cronExpression" value="20,40,59 * * * * ?" 	/> 
+	</bean>
+
+	<!--4.配置调度器 -->
+	<bean class="org.springframework.scheduling.quartz.SchedulerFactoryBean">
+		<property name="triggers">
+			<list>
+				<ref bean="myJobTrigger" />
+			</list>
+		</property>
+	</bean>
+
+
+
+
+
+</beans>
